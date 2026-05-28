@@ -1,0 +1,139 @@
+trigger: none
+
+pool:
+  name: akhileshinfosys
+
+variables:
+  serviceConnection: 'akhileshapp'
+  resourceGroup: 'tikoo'
+  storageAccount: 'tikoostorage789'
+  containerName: 'rahulchor'
+  tfStateKey: 'st.tf'
+
+stages:
+
+# ---------------------------
+# 1. FORMAT
+# ---------------------------
+- stage: FMT
+  displayName: "Terraform Format"
+  jobs:
+  - job: fmt
+    steps:
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: '1.5.7'
+
+    - script: terraform fmt -recursive
+      displayName: "Auto Fix Format"
+
+    - script: terraform fmt -check -recursive
+      displayName: "Verify Format"
+
+# ---------------------------
+# 2. INIT + VALIDATE
+# ---------------------------
+- stage: INIT_VALIDATE
+  dependsOn: FMT
+  jobs:
+  - job: init_validate
+    steps:
+
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: '1.5.7'
+
+    - task: TerraformTask@5
+      displayName: "Terraform Init"
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        backendServiceArm: $(serviceConnection)
+        backendAzureRmResourceGroupName: $(resourceGroup)
+        backendAzureRmStorageAccountName: $(storageAccount)
+        backendAzureRmContainerName: $(containerName)
+        backendAzureRmKey: $(tfStateKey)
+
+    - task: TerraformTask@5
+      displayName: "Terraform Validate"
+      inputs:
+        provider: 'azurerm'
+        command: 'validate'
+
+# ---------------------------
+# 3. SECURITY
+# ---------------------------
+- stage: SECURITY
+  dependsOn: INIT_VALIDATE
+  jobs:
+  - job: security
+    steps:
+    - powershell: |
+        choco install tfsec -y
+        tfsec .
+      displayName: "Run tfsec Security Scan"
+
+# ---------------------------
+# 4. PLAN
+# ---------------------------
+- stage: PLAN
+  dependsOn: SECURITY
+  jobs:
+  - job: plan
+    steps:
+
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: '1.5.7'
+
+    - task: TerraformTask@5
+      displayName: "Terraform Init"
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        backendServiceArm: $(serviceConnection)
+        backendAzureRmResourceGroupName: $(resourceGroup)
+        backendAzureRmStorageAccountName: $(storageAccount)
+        backendAzureRmContainerName: $(containerName)
+        backendAzureRmKey: $(tfStateKey)
+
+    - task: TerraformTask@5
+      displayName: "Terraform Plan"
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        environmentServiceNameAzureRM: $(serviceConnection)
+
+# ---------------------------
+# 5. AUTO APPLY
+# ---------------------------
+- stage: APPLY
+  displayName: "Auto Apply"
+  dependsOn: PLAN
+  condition: succeeded()
+  jobs:
+  - job: apply
+    steps:
+
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: '1.5.7'
+
+    - task: TerraformTask@5
+      displayName: "Terraform Init"
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        backendServiceArm: $(serviceConnection)
+        backendAzureRmResourceGroupName: $(resourceGroup)
+        backendAzureRmStorageAccountName: $(storageAccount)
+        backendAzureRmContainerName: $(containerName)
+        backendAzureRmKey: $(tfStateKey)
+
+    - task: TerraformTask@5
+      displayName: "Terraform Apply"
+      inputs:
+        provider: 'azurerm'
+        command: 'apply'
+        environmentServiceNameAzureRM: $(serviceConnection)
+        args: '-auto-approve'
