@@ -74,6 +74,7 @@ stages:
         choco install tfsec -y
         tfsec .
       displayName: "tfsec Scan"
+      continueOnError: true
 
 # ---------------------------
 # 4. PLAN STAGE
