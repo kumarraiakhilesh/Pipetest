@@ -1,0 +1,2 @@
+variable "roja" {}
+variable "location" {}
