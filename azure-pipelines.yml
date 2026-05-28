@@ -13,30 +13,31 @@ variables:
 stages:
 
 # ---------------------------
-# 1. FORMAT
+# 1. FORMAT STAGE
 # ---------------------------
-- stage: FMT
+- stage: FORMAT
   displayName: "Terraform Format"
   jobs:
-  - job: fmt
+  - job: format
     steps:
     - task: TerraformInstaller@1
       inputs:
         terraformVersion: '1.5.7'
 
     - script: terraform fmt -recursive
-      displayName: "Auto Fix Format"
+      displayName: "Auto Format"
 
     - script: terraform fmt -check -recursive
-      displayName: "Verify Format"
+      displayName: "Format Check"
 
 # ---------------------------
-# 2. INIT + VALIDATE
+# 2. VALIDATE + INIT
 # ---------------------------
-- stage: INIT_VALIDATE
-  dependsOn: FMT
+- stage: VALIDATE_INIT
+  displayName: "Init & Validate"
+  dependsOn: FORMAT
   jobs:
-  - job: init_validate
+  - job: validate_init
     steps:
 
     - task: TerraformInstaller@1
@@ -61,22 +62,24 @@ stages:
         command: 'validate'
 
 # ---------------------------
-# 3. SECURITY
+# 3. SECURITY SCAN
 # ---------------------------
 - stage: SECURITY
-  dependsOn: INIT_VALIDATE
+  displayName: "Security Scan"
+  dependsOn: VALIDATE_INIT
   jobs:
   - job: security
     steps:
     - powershell: |
         choco install tfsec -y
         tfsec .
-      displayName: "Run tfsec Security Scan"
+      displayName: "tfsec Scan"
 
 # ---------------------------
-# 4. PLAN
+# 4. PLAN STAGE
 # ---------------------------
 - stage: PLAN
+  displayName: "Terraform Plan"
   dependsOn: SECURITY
   jobs:
   - job: plan
@@ -87,7 +90,7 @@ stages:
         terraformVersion: '1.5.7'
 
     - task: TerraformTask@5
-      displayName: "Terraform Init"
+      displayName: "Init"
       inputs:
         provider: 'azurerm'
         command: 'init'
@@ -98,18 +101,34 @@ stages:
         backendAzureRmKey: $(tfStateKey)
 
     - task: TerraformTask@5
-      displayName: "Terraform Plan"
+      displayName: "Plan"
       inputs:
         provider: 'azurerm'
         command: 'plan'
         environmentServiceNameAzureRM: $(serviceConnection)
 
 # ---------------------------
-# 5. AUTO APPLY
+# 5. APPROVAL GATE (ENTERPRISE BEST PRACTICE)
+# ---------------------------
+- stage: APPROVAL
+  displayName: "Manual Approval"
+  dependsOn: PLAN
+  condition: succeeded()
+  jobs:
+  - job: approval
+    pool: server
+    steps:
+    - task: ManualValidation@0
+      inputs:
+        instructions: "Approve Terraform deployment"
+        timeoutInMinutes: 60
+
+# ---------------------------
+# 6. APPLY STAGE
 # ---------------------------
 - stage: APPLY
-  displayName: "Auto Apply"
-  dependsOn: PLAN
+  displayName: "Terraform Apply"
+  dependsOn: APPROVAL
   condition: succeeded()
   jobs:
   - job: apply
@@ -120,7 +139,7 @@ stages:
         terraformVersion: '1.5.7'
 
     - task: TerraformTask@5
-      displayName: "Terraform Init"
+      displayName: "Init"
       inputs:
         provider: 'azurerm'
         command: 'init'
@@ -131,7 +150,7 @@ stages:
         backendAzureRmKey: $(tfStateKey)
 
     - task: TerraformTask@5
-      displayName: "Terraform Apply"
+      displayName: "Apply"
       inputs:
         provider: 'azurerm'
         command: 'apply'
