@@ -17,7 +17,6 @@ stages:
   displayName: "Terraform Format"
   jobs:
   - job: fmt
-    displayName: "Format Check"
     steps:
     - task: TerraformInstaller@1
       inputs:
@@ -31,10 +30,8 @@ stages:
 - stage: VALIDATE
   displayName: "Init & Validate"
   dependsOn: FORMAT
-
   jobs:
   - job: validate
-    displayName: "Terraform Validate"
     steps:
     - task: TerraformInstaller@1
       inputs:
@@ -62,13 +59,11 @@ stages:
 - stage: SECURITY
   displayName: "Security Scan (tfsec)"
   dependsOn: VALIDATE
-
   jobs:
-  - job: tfsec_scan
-    displayName: "Run tfsec"
+  - job: tfsec
     steps:
     - task: tfsec@1
-      displayName: "Terraform Security Scan"
+      displayName: "Run tfsec scan"
       inputs:
         version: 'v1.26.0'
         args: '--format junit --out tfsec-report.xml'
@@ -86,10 +81,8 @@ stages:
 - stage: PLAN
   displayName: "Terraform Plan"
   dependsOn: SECURITY
-
   jobs:
   - job: plan
-    displayName: "Terraform Plan"
     steps:
     - task: TerraformInstaller@1
       inputs:
@@ -112,12 +105,12 @@ stages:
         provider: 'azurerm'
         command: 'plan'
         environmentServiceNameAzureRM: $(serviceConnection)
-        args: '-out=tfplan'
+        args: '-out=$(Build.ArtifactStagingDirectory)/tfplan'
 
     - task: PublishPipelineArtifact@1
       displayName: "Publish Plan Artifact"
       inputs:
-        targetPath: 'tfplan'
+        targetPath: '$(Build.ArtifactStagingDirectory)/tfplan'
         artifact: 'tfplan'
 
 
@@ -125,10 +118,8 @@ stages:
 - stage: APPROVAL
   displayName: "Manual Approval"
   dependsOn: PLAN
-
   jobs:
   - job: approval
-    displayName: "Approval Gate"
     pool: server
     steps:
     - task: ManualValidation@0
@@ -141,11 +132,16 @@ stages:
 - stage: APPLY
   displayName: "Terraform Apply"
   dependsOn: APPROVAL
-
   jobs:
   - job: apply
-    displayName: "Terraform Apply"
     steps:
+
+    - task: DownloadPipelineArtifact@2
+      displayName: "Download Plan Artifact"
+      inputs:
+        artifact: 'tfplan'
+        path: '$(Pipeline.Workspace)'
+
     - task: TerraformInstaller@1
       inputs:
         terraformVersion: '1.5.7'
@@ -167,4 +163,4 @@ stages:
         provider: 'azurerm'
         command: 'apply'
         environmentServiceNameAzureRM: $(serviceConnection)
-        args: '-auto-approve'
+        args: '$(Pipeline.Workspace)/tfplan -auto-approve'
