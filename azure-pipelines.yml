@@ -12,40 +12,29 @@ variables:
 
 stages:
 
-# ---------------------------
-# 1. FORMAT STAGE
-# ---------------------------
+# ---------------- FORMAT ----------------
 - stage: FORMAT
-  displayName: "Terraform Format"
   jobs:
-  - job: format
+  - job: fmt
     steps:
     - task: TerraformInstaller@1
       inputs:
         terraformVersion: '1.5.7'
-
-    - script: terraform fmt -recursive
-      displayName: "Auto Format"
 
     - script: terraform fmt -check -recursive
       displayName: "Format Check"
 
-# ---------------------------
-# 2. VALIDATE + INIT
-# ---------------------------
-- stage: VALIDATE_INIT
-  displayName: "Init & Validate"
+# ---------------- VALIDATE ----------------
+- stage: VALIDATE
   dependsOn: FORMAT
   jobs:
-  - job: validate_init
+  - job: validate
     steps:
-
     - task: TerraformInstaller@1
       inputs:
         terraformVersion: '1.5.7'
 
     - task: TerraformTask@5
-      displayName: "Terraform Init"
       inputs:
         provider: 'azurerm'
         command: 'init'
@@ -56,42 +45,33 @@ stages:
         backendAzureRmKey: $(tfStateKey)
 
     - task: TerraformTask@5
-      displayName: "Terraform Validate"
       inputs:
         provider: 'azurerm'
         command: 'validate'
 
-# ---------------------------
-# 3. SECURITY SCAN
-# ---------------------------
+# ---------------- SECURITY ----------------
 - stage: SECURITY
-  displayName: "Security Scan"
-  dependsOn: VALIDATE_INIT
+  dependsOn: VALIDATE
   jobs:
-  - job: security
+  - job: tfsec_scan
     steps:
-    - powershell: |
-        choco install tfsec -y
+    - script: |
+        curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
         tfsec .
-      displayName: "tfsec Scan"
-      continueOnError: true
+      displayName: "tfsec scan"
+      failOnStderr: true
 
-# ---------------------------
-# 4. PLAN STAGE
-# ---------------------------
+# ---------------- PLAN ----------------
 - stage: PLAN
-  displayName: "Terraform Plan"
   dependsOn: SECURITY
   jobs:
   - job: plan
     steps:
-
     - task: TerraformInstaller@1
       inputs:
         terraformVersion: '1.5.7'
 
     - task: TerraformTask@5
-      displayName: "Init"
       inputs:
         provider: 'azurerm'
         command: 'init'
@@ -102,45 +82,33 @@ stages:
         backendAzureRmKey: $(tfStateKey)
 
     - task: TerraformTask@5
-      displayName: "Plan"
       inputs:
         provider: 'azurerm'
         command: 'plan'
         environmentServiceNameAzureRM: $(serviceConnection)
 
-# ---------------------------
-# 5. APPROVAL GATE (ENTERPRISE BEST PRACTICE)
-# ---------------------------
+# ---------------- APPROVAL ----------------
 - stage: APPROVAL
-  displayName: "Manual Approval"
   dependsOn: PLAN
-  condition: succeeded()
   jobs:
   - job: approval
     pool: server
     steps:
     - task: ManualValidation@0
       inputs:
-        instructions: "Approve Terraform deployment"
-        timeoutInMinutes: 60
+        instructions: "Approve deployment"
 
-# ---------------------------
-# 6. APPLY STAGE
-# ---------------------------
+# ---------------- APPLY ----------------
 - stage: APPLY
-  displayName: "Terraform Apply"
   dependsOn: APPROVAL
-  condition: succeeded()
   jobs:
   - job: apply
     steps:
-
     - task: TerraformInstaller@1
       inputs:
         terraformVersion: '1.5.7'
 
     - task: TerraformTask@5
-      displayName: "Init"
       inputs:
         provider: 'azurerm'
         command: 'init'
@@ -151,7 +119,6 @@ stages:
         backendAzureRmKey: $(tfStateKey)
 
     - task: TerraformTask@5
-      displayName: "Apply"
       inputs:
         provider: 'azurerm'
         command: 'apply'
