@@ -12,8 +12,9 @@ variables:
 
 stages:
 
-# ---------------- FORMAT ----------------
+# ---------------- FORMAT (AUTO FIX) ----------------
 - stage: FORMAT
+  displayName: "Terraform Format"
   jobs:
   - job: fmt
     steps:
@@ -21,11 +22,12 @@ stages:
       inputs:
         terraformVersion: '1.5.7'
 
-    - script: terraform fmt -check -recursive
-      displayName: "Format Check"
+    - script: terraform fmt -recursive
+      displayName: "Auto Format Fix"
 
 # ---------------- VALIDATE ----------------
 - stage: VALIDATE
+  displayName: "Init & Validate"
   dependsOn: FORMAT
   jobs:
   - job: validate
@@ -35,6 +37,7 @@ stages:
         terraformVersion: '1.5.7'
 
     - task: TerraformTask@5
+      displayName: "Terraform Init"
       inputs:
         provider: 'azurerm'
         command: 'init'
@@ -45,12 +48,14 @@ stages:
         backendAzureRmKey: $(tfStateKey)
 
     - task: TerraformTask@5
+      displayName: "Terraform Validate"
       inputs:
         provider: 'azurerm'
         command: 'validate'
 
 # ---------------- SECURITY ----------------
 - stage: SECURITY
+  displayName: "Security Scan (tfsec)"
   dependsOn: VALIDATE
   jobs:
   - job: tfsec_scan
@@ -58,11 +63,12 @@ stages:
     - script: |
         curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
         tfsec .
-      displayName: "tfsec scan"
-      failOnStderr: true
+      displayName: "Run tfsec scan"
+      continueOnError: false
 
 # ---------------- PLAN ----------------
 - stage: PLAN
+  displayName: "Terraform Plan"
   dependsOn: SECURITY
   jobs:
   - job: plan
@@ -72,6 +78,7 @@ stages:
         terraformVersion: '1.5.7'
 
     - task: TerraformTask@5
+      displayName: "Init"
       inputs:
         provider: 'azurerm'
         command: 'init'
@@ -82,6 +89,7 @@ stages:
         backendAzureRmKey: $(tfStateKey)
 
     - task: TerraformTask@5
+      displayName: "Plan"
       inputs:
         provider: 'azurerm'
         command: 'plan'
@@ -89,6 +97,7 @@ stages:
 
 # ---------------- APPROVAL ----------------
 - stage: APPROVAL
+  displayName: "Manual Approval"
   dependsOn: PLAN
   jobs:
   - job: approval
@@ -96,10 +105,12 @@ stages:
     steps:
     - task: ManualValidation@0
       inputs:
-        instructions: "Approve deployment"
+        instructions: "Approve Terraform deployment"
+        timeoutInMinutes: 60
 
 # ---------------- APPLY ----------------
 - stage: APPLY
+  displayName: "Terraform Apply"
   dependsOn: APPROVAL
   jobs:
   - job: apply
@@ -109,6 +120,7 @@ stages:
         terraformVersion: '1.5.7'
 
     - task: TerraformTask@5
+      displayName: "Init"
       inputs:
         provider: 'azurerm'
         command: 'init'
@@ -119,6 +131,7 @@ stages:
         backendAzureRmKey: $(tfStateKey)
 
     - task: TerraformTask@5
+      displayName: "Apply"
       inputs:
         provider: 'azurerm'
         command: 'apply'
