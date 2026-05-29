@@ -110,7 +110,7 @@ stages:
     - task: PublishPipelineArtifact@1
       displayName: "Publish Plan Artifact"
       inputs:
-        targetPath: '$(Build.ArtifactStagingDirectory)/tfplan'
+        targetPath: '$(System.DefaultWorkingDirectory)/tfplan' 
         artifact: 'tfplan'
 
 
