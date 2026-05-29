@@ -1,2 +1,2 @@
-roja=["sudhir","arun1","dinesh1","rmama","getta"]
+roja=["sudheer","gruh","talab","rmh","haha"]
 location = "westindia"
