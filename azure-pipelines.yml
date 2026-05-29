@@ -17,20 +17,24 @@ stages:
   displayName: "Terraform Format"
   jobs:
   - job: fmt
+    displayName: "Format Check"
     steps:
     - task: TerraformInstaller@1
       inputs:
         terraformVersion: '1.5.7'
 
     - script: terraform fmt -recursive
-      displayName: "Auto Format Fix"
+      displayName: "Run Terraform Format"
+
 
 # ---------------- VALIDATE ----------------
 - stage: VALIDATE
   displayName: "Init & Validate"
   dependsOn: FORMAT
+
   jobs:
   - job: validate
+    displayName: "Terraform Validate"
     steps:
     - task: TerraformInstaller@1
       inputs:
@@ -53,25 +57,39 @@ stages:
         provider: 'azurerm'
         command: 'validate'
 
+
 # ---------------- SECURITY ----------------
 - stage: SECURITY
   displayName: "Security Scan (tfsec)"
   dependsOn: VALIDATE
+
   jobs:
   - job: tfsec_scan
+    displayName: "Run tfsec"
     steps:
-    - script: |
-        curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
-        tfsec .
-      displayName: "Run tfsec scan"
-      continueOnError: false
+    - task: tfsec@1
+      displayName: "Terraform Security Scan"
+      inputs:
+        version: 'v1.26.0'
+        args: '--format junit --out tfsec-report.xml'
+        dir: '.'
+
+    - task: PublishTestResults@2
+      displayName: "Publish tfsec Report"
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: 'tfsec-report.xml'
+        failTaskOnFailedTests: true
+
 
 # ---------------- PLAN ----------------
 - stage: PLAN
   displayName: "Terraform Plan"
   dependsOn: SECURITY
+
   jobs:
   - job: plan
+    displayName: "Terraform Plan"
     steps:
     - task: TerraformInstaller@1
       inputs:
@@ -94,26 +112,39 @@ stages:
         provider: 'azurerm'
         command: 'plan'
         environmentServiceNameAzureRM: $(serviceConnection)
+        args: '-out=tfplan'
+
+    - task: PublishPipelineArtifact@1
+      displayName: "Publish Plan Artifact"
+      inputs:
+        targetPath: 'tfplan'
+        artifact: 'tfplan'
+
 
 # ---------------- APPROVAL ----------------
 - stage: APPROVAL
   displayName: "Manual Approval"
   dependsOn: PLAN
+
   jobs:
   - job: approval
+    displayName: "Approval Gate"
     pool: server
     steps:
     - task: ManualValidation@0
       inputs:
-        instructions: "Approve Terraform deployment"
+        instructions: "Review Terraform Plan and approve deployment"
         timeoutInMinutes: 60
+
 
 # ---------------- APPLY ----------------
 - stage: APPLY
   displayName: "Terraform Apply"
   dependsOn: APPROVAL
+
   jobs:
   - job: apply
+    displayName: "Terraform Apply"
     steps:
     - task: TerraformInstaller@1
       inputs:
