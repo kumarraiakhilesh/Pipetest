@@ -105,12 +105,12 @@ stages:
         provider: 'azurerm'
         command: 'plan'
         environmentServiceNameAzureRM: $(serviceConnection)
-        args: '-out=$(Build.ArtifactStagingDirectory)/tfplan'
+        args: '-out=$(Build.ArtifactStagingDirectory)/tfplan' # Outputs to staging directory
 
     - task: PublishPipelineArtifact@1
       displayName: "Publish Plan Artifact"
       inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/tfplan' 
+        targetPath: '$(Build.ArtifactStagingDirectory)/tfplan' # Publishes from staging directory
         artifact: 'tfplan'
 
 
@@ -140,7 +140,7 @@ stages:
       displayName: "Download Plan Artifact"
       inputs:
         artifact: 'tfplan'
-        path: '$(Pipeline.Workspace)'
+        path: '$(Pipeline.Workspace)' # Downloads to $(Pipeline.Workspace)/tfplan
 
     - task: TerraformInstaller@1
       inputs:
@@ -163,4 +163,4 @@ stages:
         provider: 'azurerm'
         command: 'apply'
         environmentServiceNameAzureRM: $(serviceConnection)
-        args: '$(Pipeline.Workspace)/tfplan -auto-approve'
+        args: '$(Pipeline.Workspace)/tfplan/tfplan' # Applies the downloaded file inside the downloaded artifact directory
